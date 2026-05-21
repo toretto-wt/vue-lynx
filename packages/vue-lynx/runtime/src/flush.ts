@@ -2,7 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-import { queuePostFlushCb } from '@vue/runtime-core';
+import { nextTick as vueNextTick } from 'vue';
 
 import { takeOps } from './ops.js';
 
@@ -61,7 +61,13 @@ export function waitForFlush(): Promise<void> {
 export function scheduleFlush(): void {
   if (scheduled) return;
   scheduled = true;
-  queuePostFlushCb(doFlush);
+  vueNextTick(doFlush);
+}
+
+/** Flush pending ops synchronously. Used after Vue 2's initial mount. */
+export function flushNow(): void {
+  if (!scheduled) return;
+  doFlush();
 }
 
 /** Reset module state – for testing only. */

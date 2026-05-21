@@ -2,7 +2,7 @@
   "name": "vue-lynx-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Vue 3 custom renderer for Lynx Background Thread (internal build target)",
+  "description": "Vue 2.7 renderer for Lynx Background Thread (internal build target)",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

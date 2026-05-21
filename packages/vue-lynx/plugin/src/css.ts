@@ -13,24 +13,18 @@
  *   4. Configures the Main-Thread layer to ignore CSS entirely.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import type { CSSLoaderOptions, RsbuildPluginAPI, Rspack } from '@rsbuild/core';
+import type { RsbuildPluginAPI } from '@rsbuild/core';
 
 import type {
   CssExtractRspackPluginOptions,
   CssExtractWebpackPluginOptions,
 } from '@lynx-js/css-extract-webpack-plugin';
 
-import { LAYERS } from './layers.js';
 
 export interface ApplyCSSOptions {
   enableCSSSelector: boolean;
   enableCSSInvalidation: boolean;
 }
-
-const _dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function applyCSS(
   api: RsbuildPluginAPI,
@@ -72,51 +66,14 @@ export function applyCSS(
           // Remove lightningcss-loader — Lynx processes CSS natively.
           removeLightningCSS(rule, CHAIN_ID);
 
-          // Use the Lynx CssExtract loader for the Background layer.
+          // Use the Lynx CssExtract loader. Vue 2's vue-loader v15 compiles
+          // module rules through webpack's RuleSetCompiler, which rejects
+          // Rspack-only issuerLayer fields, so layer-specific CSS routing must
+          // be kept out of the static rule set.
           rule
-            .issuerLayer(LAYERS.BACKGROUND)
             .use(CHAIN_ID.USE.MINI_CSS_EXTRACT)
             .loader(CssExtractPlugin.loader)
             .end();
-
-          // Clone the existing CSS rule chain for the Main-Thread layer.
-          // Main-Thread bundles never contain user CSS — only the PAPI
-          // bootstrap code.  We replace all loaders with ignore-css + a
-          // css-loader configured for `exportOnlyLocals: true`.
-          const uses = rule.uses.entries();
-          const ruleEntries = rule.entries() as Rspack.RuleSetRule;
-          const cssLoaderRule = uses[CHAIN_ID.USE.CSS]?.entries() as
-            | Rspack.RuleSetRule
-            | undefined;
-
-          chain.module
-            .rule(`${ruleName}:${LAYERS.MAIN_THREAD}`)
-            .merge(ruleEntries)
-            .issuerLayer(LAYERS.MAIN_THREAD)
-            .use(CHAIN_ID.USE.IGNORE_CSS)
-            .loader(path.resolve(_dirname, './loaders/ignore-css-loader'))
-            .end()
-            .uses.merge(uses)
-            .delete(CHAIN_ID.USE.MINI_CSS_EXTRACT)
-            .delete(CHAIN_ID.USE.LIGHTNINGCSS)
-            .delete(CHAIN_ID.USE.CSS)
-            .end();
-
-          // Re-add css-loader with exportOnlyLocals for main-thread
-          if (cssLoaderRule) {
-            chain.module
-              .rule(`${ruleName}:${LAYERS.MAIN_THREAD}`)
-              .use(CHAIN_ID.USE.CSS)
-              .after(CHAIN_ID.USE.IGNORE_CSS)
-              .merge(cssLoaderRule)
-              .options(
-                normalizeCssLoaderOptions(
-                  cssLoaderRule.options as CSSLoaderOptions,
-                  true,
-                ),
-              )
-              .end();
-          }
         });
 
       // Also strip lightningcss from inline CSS rules (Rsbuild ≥1.3.0).
@@ -180,37 +137,3 @@ export function applyCSS(
     },
   );
 }
-
-/**
- * Force `exportOnlyLocals: true` on the css-loader modules config.
- * Copied from rsbuild internals — required when the target is not `web`
- * and CSS modules are enabled.
- */
-const normalizeCssLoaderOptions = (
-  options: CSSLoaderOptions,
-  exportOnlyLocals: boolean,
-): CSSLoaderOptions => {
-  if (options.modules && exportOnlyLocals) {
-    let { modules } = options;
-    if (modules === true) {
-      modules = { exportOnlyLocals: true };
-    } else if (typeof modules === 'string') {
-      modules = {
-        mode: modules as 'local',
-        exportOnlyLocals: true,
-      };
-    } else {
-      modules = {
-        ...modules,
-        exportOnlyLocals: true,
-      };
-    }
-
-    return {
-      ...options,
-      modules,
-    };
-  }
-
-  return options;
-};

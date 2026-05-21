@@ -5,7 +5,7 @@
 /**
  * @packageDocumentation
  *
- * A rsbuild / rspeedy plugin that integrates Vue 3 with Lynx's dual-thread
+ * A rsbuild / rspeedy plugin that integrates Vue 2.7 with Lynx's dual-thread
  * architecture (Background Thread renderer + Main Thread PAPI executor).
  *
  * @example
@@ -25,7 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { RsbuildPlugin } from '@rsbuild/core';
-import { pluginVue } from '@rsbuild/plugin-vue';
+import { pluginVue2 } from '@rsbuild/plugin-vue2';
 
 import { applyCSS } from './css.js';
 import { applyEntry } from './entry.js';
@@ -43,13 +43,6 @@ export { LAYERS };
  * @public
  */
 export interface PluginVueLynxOptions {
-  /**
-   * Whether to enable Vue's Options API support.
-   * Disabling it reduces bundle size.
-   * @defaultValue true
-   */
-  optionsApi?: boolean;
-
   /**
    * Whether to enable Vue devtools in production builds.
    * @defaultValue false
@@ -115,7 +108,7 @@ export interface PluginVueLynxOptions {
  * Create rsbuild / rspeedy plugins for Vue-Lynx dual-thread rendering.
  *
  * Returns an array of two plugins:
- * 1. `@rsbuild/plugin-vue` — Vue SFC support (rspack-vue-loader + VueLoaderPlugin)
+ * 1. `@rsbuild/plugin-vue2` — Vue 2 SFC support (vue-loader v15 + VueLoaderPlugin)
  * 2. `lynx:vue` — Lynx dual-thread entry splitting, PAPI bootstrap, and CSS handling
  *
  * @public
@@ -124,7 +117,6 @@ export function pluginVueLynx(
   options: PluginVueLynxOptions = {},
 ): RsbuildPlugin[] {
   const {
-    optionsApi = true,
     prodDevtools = false,
     enableCSSSelector = true,
     enableCSSInheritance = false,
@@ -135,21 +127,12 @@ export function pluginVueLynx(
   } = options;
 
   return [
-    // ① Official Vue SFC support (rspack-vue-loader + VueLoaderPlugin)
-    pluginVue({
+    // ① Official Vue 2 SFC support (vue-loader v15 + VueLoaderPlugin)
+    pluginVue2({
       vueLoaderOptions: {
         experimentalInlineMatchResource: true,
         compilerOptions: {
-          // Lynx native tags (view, text, image, etc.) should not be resolved
-          // via resolveComponent — treat everything as native.
-          isNativeTag: () => true,
-          whitespace: 'condense',
-          // Disable static hoisting: @vue/compiler-dom's stringifyStatic
-          // transform converts runs of 5+ constant-prop siblings into a single
-          // HTML string VNode requiring insertStaticContent() in the renderer.
-          // Our ShadowElement custom renderer can't parse HTML strings, so we
-          // disable hoisting entirely — the standard approach for non-DOM renderers.
-          hoistStatic: false,
+          preserveWhitespace: false,
         },
       },
     }),
@@ -157,9 +140,9 @@ export function pluginVueLynx(
     // ② Lynx dual-thread adaptation logic
     {
       name: 'lynx:vue',
-      // Must run after pluginVue ('rsbuild:vue') so that our modifyBundlerChain
-      // can see the CHAIN_ID.RULE.VUE rule created by pluginVue.
-      pre: ['lynx:rsbuild:plugin-api', 'lynx:config', 'rsbuild:vue'],
+      // Must run after the Vue SFC plugin so that our modifyBundlerChain can
+      // see the CHAIN_ID.RULE.VUE rule created by the Vue loader plugin.
+      pre: ['lynx:rsbuild:plugin-api', 'lynx:config', 'rsbuild:vue2'],
 
       setup(api) {
         // Detect Tailwind v3 + v4 package mismatch early.
@@ -201,7 +184,6 @@ export function pluginVueLynx(
             source: {
               define: {
                 __DEV__: 'process.env.NODE_ENV !== \'production\'',
-                __VUE_OPTIONS_API__: optionsApi ? 'true' : 'false',
                 __VUE_PROD_DEVTOOLS__: prodDevtools ? 'true' : 'false',
                 __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false',
                 __VUE_LYNX_AUTO_PIXEL_UNIT__: JSON.stringify(autoPixelUnit),
@@ -228,10 +210,6 @@ export function pluginVueLynx(
         });
 
         api.modifyBundlerChain((chain) => {
-          // "vue" → "vue-lynx" ensures template compiler output
-          // imports from the same module instance (singleton shared state)
-          chain.resolve.alias.set('vue', 'vue-lynx');
-
           // Ensure vue-lynx/internal/ops resolves correctly.
           // main-thread/dist and runtime/dist import this path, but rspack's
           // resolution walks up from those directories to the repo root's

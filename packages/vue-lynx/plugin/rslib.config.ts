@@ -22,7 +22,7 @@ export default defineConfig({
   output: {
     externals: [
       '@rsbuild/core',
-      '@rsbuild/plugin-vue',
+      '@rsbuild/plugin-vue2',
       '@lynx-js/css-extract-webpack-plugin',
       '@lynx-js/react',
       '@lynx-js/react/transform',

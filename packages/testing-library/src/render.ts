@@ -11,7 +11,7 @@
  *   4. Return the JSDOM container with RTL queries
  */
 
-import type { Component } from '@vue/runtime-core';
+import type { Component } from 'vue';
 import { getQueriesForElement } from '@testing-library/dom';
 import { createApp, resetForTesting, nextTick } from 'vue-lynx';
 import type { VueLynxApp } from 'vue-lynx';

@@ -2,14 +2,34 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-import type { RendererOptions } from '@vue/runtime-core';
-
 import { register, unregister, updateHandler } from './event-registry.js';
 import { scheduleFlush } from './flush.js';
 import { OP, pushOp } from './ops.js';
 import { registerWorkletCtx } from './run-on-background.js';
 import { ShadowElement } from './shadow-element.js';
 import type { Worklet } from './worklet-types.js';
+
+export interface LynxNodeOps {
+  createElement(type: string): ShadowElement;
+  createText(text: string): ShadowElement;
+  createComment(text: string): ShadowElement;
+  setText(node: ShadowElement, text: string): void;
+  setElementText(el: ShadowElement, text: string): void;
+  insert(
+    child: ShadowElement,
+    parent: ShadowElement,
+    anchor?: ShadowElement | null,
+  ): void;
+  remove(child: ShadowElement): void;
+  patchProp(
+    el: ShadowElement,
+    key: string,
+    prevValue: unknown,
+    nextValue: unknown,
+  ): void;
+  parentNode(node: ShadowElement): ShadowElement | null;
+  nextSibling(node: ShadowElement): ShadowElement | null;
+}
 
 // ---------------------------------------------------------------------------
 // Style normalisation – numeric values → 'Npx' (Lynx requires units)
@@ -121,7 +141,7 @@ export function resolveClass(el: ShadowElement): string {
 // RendererOptions implementation
 // ---------------------------------------------------------------------------
 
-export const nodeOps: RendererOptions<ShadowElement, ShadowElement> = {
+export const nodeOps: LynxNodeOps = {
   createElement(type: string): ShadowElement {
     const el = new ShadowElement(type);
     pushOp(OP.CREATE, el.id, type);

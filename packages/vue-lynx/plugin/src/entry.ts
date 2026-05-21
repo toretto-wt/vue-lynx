@@ -23,6 +23,7 @@ const PLUGIN_ENCODE = 'lynx:vue-encode';
 const PLUGIN_MARK_MAIN_THREAD = 'lynx:vue-mark-main-thread';
 // worklet-runtime is now bundled directly into main-thread.js (no separate chunk).
 const PLUGIN_WEB_ENCODE = 'lynx:vue-web-encode';
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 /** Minimal typing for a webpack Chunk (avoids importing @rspack/core). */
 interface WebpackChunk {
@@ -57,6 +58,11 @@ interface WebpackCompilation {
 
 /** Minimal typing for the webpack Compiler object (avoids importing @rspack/core). */
 interface WebpackCompiler {
+  options?: {
+    module?: {
+      rules?: unknown[];
+    };
+  };
   webpack: {
     Compilation: {
       PROCESS_ASSETS_STAGE_ADDITIONAL: number;
@@ -73,6 +79,17 @@ interface WebpackCompiler {
       ): void;
     };
   };
+}
+
+class VueLayerRulesPlugin {
+  constructor(private readonly rules: unknown[]) {}
+
+  apply(compiler: WebpackCompiler): void {
+    compiler.options ??= {};
+    compiler.options.module ??= {};
+    compiler.options.module.rules ??= [];
+    compiler.options.module.rules.push(...this.rules);
+  }
 }
 
 /**
@@ -239,7 +256,7 @@ export function applyEntry(
       'enableCSSInlineVariables',
     ];
     for (const key of configKeys) {
-      if (Object.hasOwn(exposedConfig.config, key)) {
+      if (hasOwnProperty.call(exposedConfig.config, key)) {
         (opts as Record<string, unknown>)[key] = exposedConfig.config[key];
       }
     }
@@ -292,14 +309,20 @@ export function applyEntry(
       || environment.name.startsWith('web-');
     if (!isLynx && !isWeb) return;
 
-    chain.module
-      .rule('vue:worklet')
-      .issuerLayer(LAYERS.BACKGROUND)
-      .test(/\.(?:[cm]?[jt]sx?|vue)$/)
-      .exclude.add(/node_modules/).end()
-      .use('worklet-loader')
-      .loader(path.resolve(_dirname, './loaders/worklet-loader'))
-      .end();
+    chain
+      .plugin('vue:background-layer-rules')
+      .use(VueLayerRulesPlugin, [[
+        {
+          issuerLayer: LAYERS.BACKGROUND,
+          test: /\.(?:[cm]?[jt]sx?|vue)$/,
+          exclude: /node_modules/,
+          use: [
+            {
+              loader: path.resolve(_dirname, './loaders/worklet-loader'),
+            },
+          ],
+        },
+      ]]);
   });
 
   // MT-layer loaders: process user code to extract LEPUS worklet registrations.
@@ -334,32 +357,40 @@ export function applyEntry(
     // (via .ts match resource extension), ensuring both BG and MT worklet
     // transforms see the same @vue/compiler-sfc compiled script content,
     // producing matching _wkltId hashes.
-    chain.module
-      .rule('vue:mt-sfc')
-      .enforce('post')
-      .issuerLayer(LAYERS.MAIN_THREAD)
-      .test(/\.vue$/)
-      .use('worklet-loader-mt')
-      .loader(path.resolve(_dirname, './loaders/worklet-loader-mt'))
-      .end();
+    const mtRules: unknown[] = [
+      {
+        enforce: 'post',
+        issuerLayer: LAYERS.MAIN_THREAD,
+        test: /\.vue$/,
+        use: [
+          {
+            loader: path.resolve(_dirname, './loaders/worklet-loader-mt'),
+          },
+        ],
+      },
+    ];
 
     // JS/TS on MT: LEPUS worklet transform (extract registerWorkletInternal calls).
     // Shared-runtime modules (imported with `{ runtime: 'shared' }`) are detected
     // inside the loader itself and passed through unchanged — see worklet-loader-mt.
-    const workletMtExclude = chain.module
-      .rule('vue:worklet-mt')
-      .issuerLayer(LAYERS.MAIN_THREAD)
-      .test(/\.[cm]?[jt]sx?$/)
-      .exclude
-      .add(/node_modules/)
-      .add(mainThreadPkgDir);
-    if (vueInternalPkgDir) {
-      workletMtExclude.add(vueInternalPkgDir);
-    }
-    workletMtExclude.end()
-      .use('worklet-loader-mt')
-      .loader(path.resolve(_dirname, './loaders/worklet-loader-mt'))
-      .end();
+    mtRules.push({
+      issuerLayer: LAYERS.MAIN_THREAD,
+      test: /\.[cm]?[jt]sx?$/,
+      exclude: [
+        /node_modules/,
+        mainThreadPkgDir,
+        ...(vueInternalPkgDir ? [vueInternalPkgDir] : []),
+      ],
+      use: [
+        {
+          loader: path.resolve(_dirname, './loaders/worklet-loader-mt'),
+        },
+      ],
+    });
+
+    chain
+      .plugin('vue:main-thread-layer-rules')
+      .use(VueLayerRulesPlugin, [mtRules]);
   });
 
   api.modifyBundlerChain((chain, { environment, isDev, isProd }) => {

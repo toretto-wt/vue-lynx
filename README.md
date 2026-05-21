@@ -1,6 +1,6 @@
 # vue-lynx
 
-Vue 3 custom renderer for building [Lynx](https://lynxjs.org) apps.
+Vue 2.7 renderer for building [Lynx](https://lynxjs.org) apps.
 
 > [!WARNING]
 > **Pre-Alpha** — Expect bugs and enjoy! 

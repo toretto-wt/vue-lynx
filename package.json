@@ -16,6 +16,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@changesets/cli": "^2.30.0"
+    "@changesets/cli": "^2.30.0",
+    "vue": "^2.7.16",
+    "vue-template-compiler": "^2.7.16"
   }
 }

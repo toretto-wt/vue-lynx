@@ -24,8 +24,8 @@
  * functions for type compatibility with the worklet-runtime's hydrated refs.
  */
 
-import { shallowRef } from '@vue/runtime-core';
-import type { ShallowRef } from '@vue/runtime-core';
+import { shallowRef } from 'vue';
+import type { ShallowRef } from 'vue';
 
 import { OP, pushOp } from './ops.js';
 
